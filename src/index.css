@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens ────────────────────────────────────────────*/
+@layer base {
+  :root {
+    --background:   220 25% 6%;
+    --foreground:   210 20% 96%;
+    --card:         220 22% 9%;
+    --card-foreground: 210 20% 96%;
+    --border:       220 18% 14%;
+    --input:        220 18% 12%;
+    --ring:         210 85% 55%;
+    --primary:      210 85% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary:    220 18% 14%;
+    --secondary-foreground: 210 20% 80%;
+    --muted:        220 18% 12%;
+    --muted-foreground: 215 16% 47%;
+    --accent:       40 95% 47%;
+    --accent-foreground: 220 25% 6%;
+    --destructive:  0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --radius: 0.5rem;
+  }
+}
+
+/* ── Base styles ──────────────────────────────────────────────*/
+@layer base {
+  * { @apply border-border; }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(30,92,142,0.12) 0%, transparent 100%);
+  }
+
+  h1, h2, h3, h4, h5, h6 { @apply font-display font-semibold tracking-tight; }
+
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: hsl(var(--background)); }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+}
+
+/* ── Component utilities ──────────────────────────────────────*/
+@layer components {
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-card border border-border rounded-xl;
+    background: linear-gradient(135deg,
+      hsl(220 22% 10% / 0.95) 0%,
+      hsl(220 22% 8% / 0.95) 100%);
+    backdrop-filter: blur(12px);
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply glass-card p-5 transition-all duration-200 hover:shadow-card-hover;
+  }
+
+  /* Nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-muted-foreground hover:text-foreground hover:bg-secondary
+           transition-all duration-150 cursor-pointer;
+  }
+  .nav-item.active {
+    @apply text-foreground bg-secondary;
+    box-shadow: inset 2px 0 0 hsl(var(--accent));
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+
+  /* Table styles */
+  .table-row {
+    @apply border-b border-border hover:bg-secondary/50 transition-colors;
+  }
+
+  /* Input field */
+  .field-input {
+    @apply w-full bg-input border border-border rounded-lg px-3 py-2 text-sm
+           text-foreground placeholder:text-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+           transition-all duration-150;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+           bg-primary text-primary-foreground hover:bg-primary/90
+           transition-all duration-150 active:scale-95;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+           text-muted-foreground hover:text-foreground hover:bg-secondary
+           transition-all duration-150;
+  }
+
+  /* Section header */
+  .section-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-1.5 rounded-full bg-secondary overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-700;
+  }
+
+  /* Shimmer loading */
+  .shimmer {
+    background: linear-gradient(90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--secondary)) 50%,
+      hsl(var(--muted)) 75%);
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
+
+/* ── Number font ──────────────────────────────────────────────*/
+.font-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}

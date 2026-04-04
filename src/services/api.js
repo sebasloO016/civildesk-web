@@ -74,6 +74,8 @@ export const worksApi = {
   close:             (id, data)     => api.post(`/works/${id}/close`, data),
   getReports:        (id, params)   => api.get(`/works/${id}/reports`, { params }),
   createReport:      (id, data)     => api.post(`/works/${id}/reports`, data),
+  createFromProject: (projectId, d) => api.post(`/works/from-project/${projectId}`, d),
+
 }
 
 export const projectsApi = {
@@ -89,6 +91,8 @@ export const projectsApi = {
   addAddendum:      (id, data)        => api.post(`/projects/${id}/contract/addendum`, data),
   createLiquidation:(id, data)        => api.post(`/projects/${id}/liquidation`, data),
   signLiquidation:  (id, data)        => api.patch(`/projects/${id}/liquidation/sign`, data),
+  updateContractDocument: (id, d) => api.patch(`/projects/${id}/contract/document`, d),
+
 }
 
 export const suppliersApi = {

@@ -10,7 +10,7 @@ import {
   BarChart2, Calendar, Package, TrendingUp,
   AlertTriangle, CheckCircle2, Clock, Plus,
   Camera, ShoppingCart, Edit2, Trash2, X,
-  Pencil, TrendingDown,
+  Pencil, TrendingDown, Loader2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -615,27 +615,55 @@ function BudgetTab({ work }) {
   const budget = budgetData?.data?.data
   const items  = itemsData?.data?.data || work.items || []
 
+  // Estado para edición inline por fila
+  const [editingRow, setEditingRow]   = useState(null) // { id, real_qty, progress_pct }
+  const [savingRow,  setSavingRow]    = useState(null)
+
   const deleteMut = useMutation({
     mutationFn: (itemId) => api.delete(`/works/${work.id}/items/${itemId}`),
     onSuccess: () => {
       toast({ title: 'Rubro eliminado', variant: 'success' })
-      refetchBudget()
-      refetchItems()
+      refetchBudget(); refetchItems()
       qc.invalidateQueries(['work', String(work.id)])
     },
     onError: (e) => toast({ title: 'Error', description: e.response?.data?.message, variant: 'destructive' }),
   })
 
   const handleSuccess = () => {
-    refetchBudget()
-    refetchItems()
+    refetchBudget(); refetchItems()
     qc.invalidateQueries(['work', String(work.id)])
   }
 
   const confirmDelete = (item) => {
-    if (window.confirm(`¿Eliminar el rubro "${item.description}"?`)) {
-      deleteMut.mutate(item.id)
-    }
+    if (window.confirm(`¿Eliminar el rubro "${item.description}"?`)) deleteMut.mutate(item.id)
+  }
+
+  const startEdit = (item) => setEditingRow({
+    id:           item.id,
+    real_qty:     parseFloat(item.real_qty || 0),
+    progress_pct: parseFloat(item.progress_pct || 0),
+    unit_cost:    parseFloat(item.unit_cost || 0),
+  })
+
+  const saveRow = async () => {
+    if (!editingRow) return
+    setSavingRow(editingRow.id)
+    try {
+      const real_total = editingRow.real_qty * editingRow.unit_cost
+      await api.put(`/works/${work.id}/items/${editingRow.id}`, {
+        real_qty:     editingRow.real_qty,
+        real_total:   Math.round(real_total * 100) / 100,
+        progress_pct: editingRow.progress_pct,
+      })
+      // Recalcular avance de obra
+      await worksApi.updateProgress(work.id, {})
+      setEditingRow(null)
+      refetchBudget(); refetchItems()
+      qc.invalidateQueries(['work', String(work.id)])
+      toast({ title: 'Rubro actualizado', variant: 'success' })
+    } catch (e) {
+      toast({ title: 'Error', description: e.response?.data?.message, variant: 'destructive' })
+    } finally { setSavingRow(null) }
   }
 
   return (
@@ -722,44 +750,95 @@ function BudgetTab({ work }) {
                     </div>
                   </td>
                 </tr>
-              ) : items.map(item => (
-                <tr key={item.id} className="table-row group">
-                  <td className="px-4 py-3 font-medium text-foreground max-w-xs truncate">{item.description}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{item.unit}</td>
-                  <td className="px-4 py-3 font-num">{parseFloat(item.initial_qty).toFixed(2)}</td>
-                  <td className="px-4 py-3 font-num">{parseFloat(item.real_qty || 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 font-num text-rose-300">{formatCurrency(item.unit_cost)}</td>
-                  <td className="px-4 py-3 font-num text-blue-300">{formatCurrency(item.unit_price)}</td>
-                  <td className="px-4 py-3 font-num font-semibold">{formatCurrency(item.real_total)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="progress-bar w-16">
-                        <div className={cn('progress-fill', progressColor(item.progress_pct))}
-                          style={{ width: `${item.progress_pct}%` }} />
-                      </div>
-                      <span className="font-num text-foreground">{formatPct(item.progress_pct)}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => setRubroModal(item)}
-                        className="btn-ghost p-1.5 hover:text-blue-400"
-                        title="Editar"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => confirmDelete(item)}
-                        className="btn-ghost p-1.5 hover:text-rose-400 hover:bg-rose-500/10"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : items.map(item => {
+                const isEditing = editingRow?.id === item.id
+                const isSaving  = savingRow === item.id
+                const autoRealTotal = isEditing
+                  ? (editingRow.real_qty * editingRow.unit_cost)
+                  : parseFloat(item.real_total || 0)
+                return (
+                  <tr key={item.id} className={cn('table-row group', isEditing && 'bg-blue-500/5 ring-1 ring-inset ring-blue-500/20')}>
+                    <td className="px-4 py-3 font-medium text-foreground max-w-xs truncate">{item.description}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{item.unit}</td>
+                    <td className="px-4 py-3 font-num">{parseFloat(item.initial_qty).toFixed(2)}</td>
+
+                    {/* Cant. Real — editable */}
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <input type="number" step="0.01" min="0"
+                          className="field-input text-xs w-20 font-num"
+                          value={editingRow.real_qty}
+                          onChange={e => setEditingRow(r => ({ ...r, real_qty: parseFloat(e.target.value) || 0 }))}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="font-num">{parseFloat(item.real_qty || 0).toFixed(2)}</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 font-num text-rose-300">{formatCurrency(item.unit_cost)}</td>
+                    <td className="px-4 py-3 font-num text-blue-300">{formatCurrency(item.unit_price)}</td>
+
+                    {/* Total Real — calculado auto */}
+                    <td className="px-4 py-3 font-num font-semibold">
+                      <span className={isEditing ? 'text-amber-400' : ''}>
+                        {formatCurrency(autoRealTotal)}
+                      </span>
+                      {isEditing && <span className="text-[9px] text-muted-foreground ml-1">auto</span>}
+                    </td>
+
+                    {/* Avance % — editable */}
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <input type="number" step="0.1" min="0" max="100"
+                            className="field-input text-xs w-16 font-num"
+                            value={editingRow.progress_pct}
+                            onChange={e => setEditingRow(r => ({ ...r, progress_pct: parseFloat(e.target.value) || 0 }))}
+                          />
+                          <span className="text-[10px] text-muted-foreground">%</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="progress-bar w-16">
+                            <div className={cn('progress-fill', progressColor(item.progress_pct))}
+                              style={{ width: `${item.progress_pct}%` }} />
+                          </div>
+                          <span className="font-num text-foreground">{formatPct(item.progress_pct)}</span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Acciones */}
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <div className="flex gap-1">
+                          <button onClick={saveRow} disabled={isSaving}
+                            className="btn-primary text-xs py-1 px-2 h-7 gap-1">
+                            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : '✓'}
+                          </button>
+                          <button onClick={() => setEditingRow(null)} className="btn-ghost text-xs py-1 px-1.5 h-7">✕</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEdit(item)}
+                            className="btn-ghost p-1.5 hover:text-emerald-400" title="Actualizar avance real">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setRubroModal(item)}
+                            className="btn-ghost p-1.5 hover:text-blue-400" title="Editar rubro">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => confirmDelete(item)}
+                            className="btn-ghost p-1.5 hover:text-rose-400 hover:bg-rose-500/10" title="Eliminar">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             {items.length > 0 && budget && (
               <tfoot>
@@ -1022,4 +1101,3 @@ export default function WorkDetail() {
     </div>
   )
 }
-

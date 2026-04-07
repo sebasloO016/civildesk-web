@@ -62,20 +62,23 @@ api.interceptors.response.use(
 
 // ── Helpers ───────────────────────────────────────────────────
 export const worksApi = {
-  getAll:            (params)       => api.get('/works', { params }),
-  getOne:            (id)           => api.get(`/works/${id}`),
-  create:            (data)         => api.post('/works', data),
-  createFromProject: (projectId, d) => api.post(`/works/from-project/${projectId}`, d),
-  update:            (id, data)     => api.put(`/works/${id}`, data),
-  remove:            (id)           => api.delete(`/works/${id}`),
-  getBudget:         (id)           => api.get(`/works/${id}/budget-summary`),
-  updateProgress:    (id, data)     => api.post(`/works/${id}/progress`, data),
-  getCurveS:         (id)           => api.get(`/works/${id}/curve-s`),
-  close:             (id, data)     => api.post(`/works/${id}/close`, data),
-  getReports:        (id, params)   => api.get(`/works/${id}/reports`, { params }),
-  createReport:      (id, data)     => api.post(`/works/${id}/reports`, data),
-  createFromProject: (projectId, d) => api.post(`/works/from-project/${projectId}`, d),
-
+  getAll:            (params)         => api.get('/works', { params }),
+  getOne:            (id)             => api.get(`/works/${id}`),
+  create:            (data)           => api.post('/works', data),
+  createFromProject: (projectId, d)   => api.post(`/works/from-project/${projectId}`, d),
+  update:            (id, data)       => api.put(`/works/${id}`, data),
+  remove:            (id)             => api.delete(`/works/${id}`),
+  getBudget:         (id)             => api.get(`/works/${id}/budget-summary`),
+  updateProgress:    (id, data)       => api.post(`/works/${id}/progress`, data),
+  getCurveS:         (id)             => api.get(`/works/${id}/curve-s`),
+  close:             (id, data)       => api.post(`/works/${id}/close`, data),
+  getReports:        (id, params)     => api.get(`/works/${id}/reports`, { params }),
+  createReport:      (id, data)       => api.post(`/works/${id}/reports`, data),
+  // CRUD rubros de obra
+  getItems:          (id)             => api.get(`/works/${id}/items`),
+  createItem:        (id, data)       => api.post(`/works/${id}/items`, data),
+  updateItem:        (id, itemId, d)  => api.put(`/works/${id}/items/${itemId}`, d),
+  deleteItem:        (id, itemId)     => api.delete(`/works/${id}/items/${itemId}`),
 }
 
 export const projectsApi = {
@@ -91,8 +94,7 @@ export const projectsApi = {
   addAddendum:      (id, data)        => api.post(`/projects/${id}/contract/addendum`, data),
   createLiquidation:(id, data)        => api.post(`/projects/${id}/liquidation`, data),
   signLiquidation:  (id, data)        => api.patch(`/projects/${id}/liquidation/sign`, data),
-  updateContractDocument: (id, d) => api.patch(`/projects/${id}/contract/document`, d),
-
+  updateContractDocument: (id, d)     => api.patch(`/projects/${id}/contract/document`, d),
 }
 
 export const suppliersApi = {
@@ -117,14 +119,14 @@ export const productsApi = {
 }
 
 export const purchasesApi = {
-  getRequests:      (params)  => api.get('/purchases/requests', { params }),
-  createRequest:    (data)    => api.post('/purchases/requests', data),
-  generateOrders:   (id)      => api.post(`/purchases/requests/${id}/generate-orders`),
-  getOrders:        (params)  => api.get('/purchases/orders', { params }),
-  updateOrder:      (id, data)=> api.patch(`/purchases/orders/${id}/status`, data),
-  getInvoices:      (params)  => api.get('/purchases/invoices', { params }),
-  createInvoice:    (data)    => api.post('/purchases/invoices', data),
-  getUnreconciled:  (params)  => api.get('/purchases/unreconciled', { params }),
+  getRequests:      (params)   => api.get('/purchases/requests', { params }),
+  createRequest:    (data)     => api.post('/purchases/requests', data),
+  generateOrders:   (id)       => api.post(`/purchases/requests/${id}/generate-orders`),
+  getOrders:        (params)   => api.get('/purchases/orders', { params }),
+  updateOrder:      (id, data) => api.patch(`/purchases/orders/${id}/status`, data),
+  getInvoices:      (params)   => api.get('/purchases/invoices', { params }),
+  createInvoice:    (data)     => api.post('/purchases/invoices', data),
+  getUnreconciled:  (params)   => api.get('/purchases/unreconciled', { params }),
 }
 
 export const warehouseApi = {

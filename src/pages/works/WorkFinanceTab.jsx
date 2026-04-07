@@ -45,7 +45,8 @@ const ChartTip = ({ active, payload, label }) => {
   )
 }
 
-export default function WorkFinanceTab({ workId, work }) {
+// Recibe totalObra (recursos + subcontratos) desde WorkDetail
+export default function WorkFinanceTab({ workId, work, totalObra, subTotal }) {
   const [page, setPage] = useState(1)
 
   const { data: summaryData } = useQuery({
@@ -63,10 +64,10 @@ export default function WorkFinanceTab({ workId, work }) {
     queryFn:  () => workFinanceApi.getCashflow(workId),
   })
 
-  const summary  = summaryData?.data?.data
-  const txs      = txData?.data?.data || []
+  const summary    = summaryData?.data?.data
+  const txs        = txData?.data?.data || []
   const pagination = txData?.data?.pagination
-  const cf       = cfData?.data?.data || []
+  const cf         = cfData?.data?.data || []
 
   const cfFull = Array.from({ length: 12 }, (_, i) => {
     const found = cf.find(r => r.month === i + 1)
@@ -77,14 +78,13 @@ export default function WorkFinanceTab({ workId, work }) {
     }
   })
 
-  // Pie data from breakdown
-  const breakdown  = summary?.breakdown || []
+  const breakdown        = summary?.breakdown || []
   const expenseBreakdown = breakdown
     .filter(b => b.type === 'EXPENSE')
     .map(b => ({ name: TX_LABELS[b.category] || b.category, value: parseFloat(b.total) }))
 
-  // Burn rate: gasto real vs esperado según avance
-  const budget   = parseFloat(work?.initial_budget || 0)
+  // Presupuesto total = recursos propios + subcontratos
+  const budget   = totalObra || parseFloat(work?.initial_budget || 0)
   const realCost = parseFloat(summary?.total_expense || 0)
   const progress = parseFloat(work?.actual_progress || 0)
   const expected = budget * (progress / 100)
@@ -100,7 +100,7 @@ export default function WorkFinanceTab({ workId, work }) {
           { label: 'Ingresos obra',   value: formatCurrency(summary?.total_income  || 0), color: 'text-emerald-400', icon: ArrowUpRight },
           { label: 'Egresos obra',    value: formatCurrency(summary?.total_expense || 0), color: 'text-rose-400',    icon: ArrowDownRight },
           { label: 'Balance obra',    value: formatCurrency(summary?.balance       || 0), color: 'text-blue-400',    icon: DollarSign },
-          { label: 'Presupuesto',     value: formatCurrency(budget),                      color: 'text-muted-foreground', icon: TrendingUp },
+          { label: 'Presupuesto total', value: formatCurrency(budget),                   color: 'text-muted-foreground', icon: TrendingUp },
         ].map(s => (
           <div key={s.label} className="glass-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -172,7 +172,7 @@ export default function WorkFinanceTab({ workId, work }) {
 
       {/* Transactions */}
       <div className="glass-card overflow-hidden">
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-border flex items-center justify-between">
           <h3 className="font-display font-semibold text-sm text-foreground">
             Transacciones de esta Obra
           </h3>
@@ -213,12 +213,16 @@ export default function WorkFinanceTab({ workId, work }) {
             ))}
           </tbody>
         </table>
-
+        {/* Pagination */}
         {pagination && pagination.totalPages > 1 && (
           <div className="flex items-center justify-center gap-2 p-4 border-t border-border">
-            <button disabled={!pagination.hasPrev} onClick={() => setPage(p=>p-1)} className="btn-ghost disabled:opacity-40">Anterior</button>
-            <span className="text-xs text-muted-foreground font-num">{pagination.page}/{pagination.totalPages}</span>
-            <button disabled={!pagination.hasNext} onClick={() => setPage(p=>p+1)} className="btn-ghost disabled:opacity-40">Siguiente</button>
+            <button disabled={!pagination.hasPrev} onClick={() => setPage(p => p-1)}
+              className="btn-ghost text-xs disabled:opacity-40">Anterior</button>
+            <span className="text-xs text-muted-foreground font-num">
+              {pagination.page} / {pagination.totalPages}
+            </span>
+            <button disabled={!pagination.hasNext} onClick={() => setPage(p => p+1)}
+              className="btn-ghost text-xs disabled:opacity-40">Siguiente</button>
           </div>
         )}
       </div>

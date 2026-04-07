@@ -1,29 +1,29 @@
-import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../services/api'
 import { useUIStore } from '../../store/uiStore'
 import { useForm } from 'react-hook-form'
 import {
   Plus, X, FileCheck, CheckCircle2, Clock,
-  Download, DollarSign, TrendingUp, Trash2,
+  Download, DollarSign, Trash2,
 } from 'lucide-react'
 import { formatCurrency, formatPct, formatDate, openPdf, cn } from '../../utils/helpers'
 
 const certsApi = {
-  getAll:  (wid)       => api.get(`/works/${wid}/certificates`),
-  create:  (wid, d)    => api.post(`/works/${wid}/certificates`, d),
-  approve: (wid, id)   => api.patch(`/works/${wid}/certificates/${id}/approve`),
-  remove:  (wid, id)   => api.delete(`/works/${wid}/certificates/${id}`),
-  pdf:     (id)        => openPdf(`/pdf/certificates/${id}`),
+  getAll:  (wid)     => api.get(`/works/${wid}/certificates`),
+  create:  (wid, d)  => api.post(`/works/${wid}/certificates`, d),
+  approve: (wid, id) => api.patch(`/works/${wid}/certificates/${id}/approve`),
+  remove:  (wid, id) => api.delete(`/works/${wid}/certificates/${id}`),
+  pdf:     (id)      => openPdf(`/pdf/certificates/${id}`),
 }
 
 const STATUS_CONFIG = {
-  DRAFT: { label: 'Borrador', color: 'bg-slate-500/15 text-slate-400 border-slate-500/20', icon: Clock },
+  DRAFT: { label: 'Borrador',         color: 'bg-slate-500/15 text-slate-400 border-slate-500/20',     icon: Clock },
   SENT:  { label: 'Enviado/Aprobado', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20', icon: CheckCircle2 },
-  PAID:  { label: 'Pagado', color: 'bg-blue-500/15 text-blue-400 border-blue-500/20', icon: CheckCircle2 },
+  PAID:  { label: 'Pagado',           color: 'bg-blue-500/15 text-blue-400 border-blue-500/20',         icon: CheckCircle2 },
 }
 
-export default function CertificatesTab({ work }) {
+// Recibe totalObra y subTotal desde WorkDetail
+export default function CertificatesTab({ work, totalObra, subTotal }) {
   const qc = useQueryClient()
   const { toast, openModal, closeModal, activeModal } = useUIStore()
 
@@ -34,17 +34,18 @@ export default function CertificatesTab({ work }) {
 
   const certs = data?.data?.data || []
 
-  const totalBilled = certs.filter(c => c.status === 'SENT' || c.status === 'PAID')
+  const totalBilled = certs
+    .filter(c => c.status === 'SENT' || c.status === 'PAID')
     .reduce((s, c) => s + parseFloat(c.amount_to_bill || 0), 0)
-  const lastProgress  = certs.length > 0
-    ? parseFloat(certs[0].progress_pct || 0) : 0
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
+  // Presupuesto total (recursos + subcontratos)
+  const budgetTotal = totalObra || parseFloat(work.initial_budget || 0)
+
+  const { register, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
-      progress_pct:   parseFloat(work.actual_progress || 0),
-      period_start:   new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                        .toISOString().substring(0, 10),
-      period_end:     new Date().toISOString().substring(0, 10),
+      progress_pct: parseFloat(work.actual_progress || 0),
+      period_start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().substring(0, 10),
+      period_end:   new Date().toISOString().substring(0, 10),
     },
   })
 
@@ -76,13 +77,12 @@ export default function CertificatesTab({ work }) {
     onError: (e) => toast({ title: 'Error', description: e.response?.data?.message, variant: 'destructive' }),
   })
 
-  // Auto-calcular monto al cambiar progreso
   const progressPct = watch('progress_pct')
-  const autoAmount  = () => {
-    const pct    = parseFloat(progressPct || 0)
-    const budget = parseFloat(work.initial_budget || 0)
-    // Monto = % de avance × presupuesto - ya facturado
-    const expected = (pct / 100) * budget
+
+  // Auto-calcular monto basado en presupuesto TOTAL (recursos + subcontratos)
+  const autoAmount = () => {
+    const pct      = parseFloat(progressPct || 0)
+    const expected = (pct / 100) * budgetTotal
     const amount   = Math.max(0, expected - totalBilled)
     setValue('amount_to_bill', amount.toFixed(2))
   }
@@ -95,7 +95,7 @@ export default function CertificatesTab({ work }) {
   return (
     <div className="space-y-5">
 
-      {/* Summary */}
+      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         <div className="glass-card p-4">
           <p className="font-num text-xl font-bold text-foreground">{certs.length}</p>
@@ -107,7 +107,7 @@ export default function CertificatesTab({ work }) {
         </div>
         <div className="glass-card p-4">
           <p className="font-num text-xl font-bold text-amber-400">
-            {formatCurrency(parseFloat(work.initial_budget || 0) - totalBilled)}
+            {formatCurrency(budgetTotal - totalBilled)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">Saldo pendiente de facturar</p>
         </div>
@@ -116,8 +116,17 @@ export default function CertificatesTab({ work }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{certs.length} certificado(s)</p>
-        <button onClick={() => { reset({ progress_pct: parseFloat(work.actual_progress||0), period_start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().substring(0,10), period_end: new Date().toISOString().substring(0,10) }); openModal('certForm') }}
-          className="btn-primary text-xs">
+        <button
+          onClick={() => {
+            reset({
+              progress_pct: parseFloat(work.actual_progress || 0),
+              period_start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().substring(0, 10),
+              period_end:   new Date().toISOString().substring(0, 10),
+            })
+            openModal('certForm')
+          }}
+          className="btn-primary text-xs"
+        >
           <Plus className="w-3.5 h-3.5" /> Nuevo Certificado
         </button>
       </div>
@@ -130,7 +139,7 @@ export default function CertificatesTab({ work }) {
           <FileCheck className="w-10 h-10 text-muted-foreground/30 mb-3" />
           <p className="text-muted-foreground text-sm">Sin certificados de avance</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Los certificados sirven para sustentar cobros parciales al cliente
+            Los certificados sustentan cobros parciales al cliente según avance de obra
           </p>
           <button onClick={() => openModal('certForm')} className="btn-primary mt-4 text-xs">
             <Plus className="w-3.5 h-3.5" /> Generar primer certificado
@@ -139,7 +148,7 @@ export default function CertificatesTab({ work }) {
       ) : (
         <div className="space-y-4">
           {certs.map(cert => {
-            const st = STATUS_CONFIG[cert.status] || STATUS_CONFIG.DRAFT
+            const st   = STATUS_CONFIG[cert.status] || STATUS_CONFIG.DRAFT
             const Icon = st.icon
             return (
               <div key={cert.id} className="glass-card p-5">
@@ -155,15 +164,14 @@ export default function CertificatesTab({ work }) {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Período: <strong>{cert.period}</strong> ·
-                      {formatDate(cert.period_start)} — {formatDate(cert.period_end)}
+                      Período: <strong>{cert.period}</strong>
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-num text-2xl font-bold text-amber-400">
                       {formatCurrency(cert.amount_to_bill)}
                     </p>
-                    <p className="text-xs text-muted-foreground">a facturar</p>
+                    <p className="text-xs text-muted-foreground">a facturar al cliente</p>
                   </div>
                 </div>
 
@@ -187,8 +195,7 @@ export default function CertificatesTab({ work }) {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-3 border-t border-border flex-wrap">
-                  <button onClick={() => certsApi.pdf(cert.id)}
-                    className="btn-ghost text-xs">
+                  <button onClick={() => certsApi.pdf(cert.id)} className="btn-ghost text-xs">
                     <Download className="w-3.5 h-3.5" /> Descargar PDF
                   </button>
 
@@ -226,7 +233,7 @@ export default function CertificatesTab({ work }) {
       {activeModal?.name === 'certForm' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative z-10 w-full max-w-md mx-4 glass-card p-6 animate-fade-up">
+          <div className="relative z-10 w-full max-w-md mx-4 glass-card p-6 animate-fade-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-display font-bold text-lg text-foreground">
                 Nuevo Certificado de Avance
@@ -236,17 +243,30 @@ export default function CertificatesTab({ work }) {
               </button>
             </div>
 
-            {/* Work context */}
-            <div className="glass-card p-3 mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Obra</p>
-                <p className="text-sm font-semibold text-foreground">{work.name}</p>
+            {/* Desglose presupuesto */}
+            <div className="glass-card p-3 mb-4 space-y-1.5 text-xs">
+              <p className="text-muted-foreground font-medium">{work.name}</p>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Recursos propios</span>
+                <span className="font-num">{formatCurrency(work.initial_budget)}</span>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Presupuesto</p>
-                <p className="font-num font-bold text-foreground">
-                  {formatCurrency(work.initial_budget)}
-                </p>
+              {subTotal > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Subcontratos</span>
+                  <span className="font-num">{formatCurrency(subTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold border-t border-border pt-1.5">
+                <span className="text-foreground">Total obra</span>
+                <span className="font-num text-foreground">{formatCurrency(budgetTotal)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Ya facturado</span>
+                <span className="font-num text-emerald-400">{formatCurrency(totalBilled)}</span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span className="text-amber-400">Pendiente de facturar</span>
+                <span className="font-num text-amber-400">{formatCurrency(budgetTotal - totalBilled)}</span>
               </div>
             </div>
 
@@ -256,13 +276,13 @@ export default function CertificatesTab({ work }) {
                   Período / Descripción *
                 </label>
                 <input className="field-input mt-1"
-                  placeholder="Ej: Enero 2026, Mes 1, Avance 35%..."
+                  placeholder="Ej: Abril 2026, Mes 1, Avance 35%..."
                   {...register('period', { required: true })} />
               </div>
 
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Avance acumulado certificado: {progressPct || 0}%
+                  Avance acumulado: {progressPct || 0}%
                 </label>
                 <input type="range" min="0" max="100" step="1"
                   className="w-full mt-2 accent-amber-500"
@@ -277,7 +297,7 @@ export default function CertificatesTab({ work }) {
 
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Monto a facturar *
+                  Monto a facturar al cliente *
                 </label>
                 <div className="relative mt-1">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -286,8 +306,8 @@ export default function CertificatesTab({ work }) {
                     {...register('amount_to_bill', { required: true, valueAsNumber: true })} />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Sugerido: {formatCurrency(Math.max(0, (parseFloat(progressPct||0)/100) * parseFloat(work.initial_budget||0) - totalBilled))}
-                  {' '}(basado en avance × presupuesto − ya facturado)
+                  Sugerido: {formatCurrency(Math.max(0, (parseFloat(progressPct || 0) / 100) * budgetTotal - totalBilled))}
+                  {' '}(avance × total obra − ya facturado)
                 </p>
               </div>
 

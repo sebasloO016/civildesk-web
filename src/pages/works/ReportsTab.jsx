@@ -230,6 +230,15 @@ function EditContractorsSection({ workId, reportId, existingContractors, supplie
     onError: (e) => toast({ title: 'Error', description: e.response?.data?.message, variant: 'destructive' }),
   })
 
+  const getContractorName = (c) => {
+    // Buscar nombre desde subcontratos o suppliers
+    const sub = subcontracts.find(s => s.supplier_id === c.supplier_id)
+    if (sub) return `${sub.specialty} — ${sub.supplier?.name || ''}`
+    const sup = suppliers.find(s => s.id === c.supplier_id)
+    if (sup) return sup.name
+    return c.activity || `Proveedor #${c.supplier_id}`
+  }
+
   const allOptions = [
     ...subcontracts.map(s => ({ id: s.supplier_id, label: `${s.specialty} — ${s.supplier?.name || ''}` })),
     ...suppliers.filter(s => !subcontracts.some(sc => sc.supplier_id === s.id))
@@ -256,7 +265,7 @@ function EditContractorsSection({ workId, reportId, existingContractors, supplie
             <div key={c.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/40">
               <div className="flex items-center gap-2">
                 <Users className="w-3 h-3 text-muted-foreground" />
-                <span className="text-foreground">{c.activity || c.supplier?.name || `ID ${c.supplier_id}`}</span>
+                <span className="text-foreground">{getContractorName(c)}</span>
                 <span className="text-muted-foreground">{c.workers_count} trab.</span>
               </div>
               <button type="button" onClick={() => removeMut.mutate(c.id)}
@@ -781,7 +790,7 @@ function ReportCard({ report, workId, onEdit }) {
                   <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Users className="w-3 h-3" />
                     <span>{c.activity || c.supplier?.name || '—'}</span>
-                    <span className="text-foreground">{c.workers_count} trabajadores</span>
+                    <span className="text-foreground">{c.workers_count || 0} trab.</span>
                   </div>
                 ))}
               </div>

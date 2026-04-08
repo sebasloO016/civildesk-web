@@ -643,6 +643,9 @@ function BudgetTab({ work }) {
     real_qty:     parseFloat(item.real_qty || 0),
     progress_pct: parseFloat(item.progress_pct || 0),
     unit_cost:    parseFloat(item.unit_cost || 0),
+    // paid_at: mantener el valor existente al abrir edición
+    paid_at:      item.paid_at || null,
+    was_paid:     !!item.paid_at,  // para detectar si ya estaba pagado
   })
 
   const saveRow = async () => {
@@ -650,16 +653,23 @@ function BudgetTab({ work }) {
     setSavingRow(editingRow.id)
     try {
       const real_total = editingRow.real_qty * editingRow.unit_cost
+      // Si marcó como pagado y no tenía fecha → usar fecha de hoy
+      // Si desmarcó → enviar null para eliminar la transacción
+      const isPaid = !!editingRow.paid_at
+
       await api.put(`/works/${work.id}/items/${editingRow.id}`, {
         real_qty:     editingRow.real_qty,
         real_total:   Math.round(real_total * 100) / 100,
         progress_pct: editingRow.progress_pct,
+        mark_as_paid: isPaid,               // boolean explícito — más fiable que enviar null
+        paid_at:      editingRow.paid_at,   // fecha si está pagado
       })
-      // Recalcular avance de obra
       await worksApi.updateProgress(work.id, {})
       setEditingRow(null)
       refetchBudget(); refetchItems()
       qc.invalidateQueries(['work', String(work.id)])
+      qc.invalidateQueries(['work-finance-summary', String(work.id)])
+      qc.invalidateQueries(['work-finance-summary-overview', String(work.id)])
       toast({ title: 'Rubro actualizado', variant: 'success' })
     } catch (e) {
       toast({ title: 'Error', description: e.response?.data?.message, variant: 'destructive' })
@@ -672,7 +682,7 @@ function BudgetTab({ work }) {
       {budget && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Presupuesto inicial', value: formatCurrency(budget.initial_budget?.total || 0), color: 'text-blue-400' },
+            { label: 'Recursos propios (rubros)', value: formatCurrency(budget.initial_budget?.total || 0), color: 'text-blue-400' },
             { label: 'Costo real actual',   value: formatCurrency(budget.real_cost || 0),             color: 'text-rose-400' },
             { label: 'Ahorro de bodega',    value: formatCurrency(budget.warehouse_savings || 0),     color: 'text-amber-400' },
             { label: 'Avance ponderado',    value: formatPct(budget.actual_progress || 0),            color: 'text-emerald-400' },
@@ -812,27 +822,66 @@ function BudgetTab({ work }) {
                     {/* Acciones */}
                     <td className="px-4 py-2">
                       {isEditing ? (
-                        <div className="flex gap-1">
-                          <button onClick={saveRow} disabled={isSaving}
-                            className="btn-primary text-xs py-1 px-2 h-7 gap-1">
-                            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : '✓'}
-                          </button>
-                          <button onClick={() => setEditingRow(null)} className="btn-ghost text-xs py-1 px-1.5 h-7">✕</button>
+                        <div className="space-y-2">
+                          {/* Checkbox de pago */}
+                          <label className={cn(
+                            'flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg cursor-pointer transition-colors',
+                            editingRow.paid_at
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          )}>
+                            <input
+                              type="checkbox"
+                              checked={!!editingRow.paid_at}
+                              onChange={e => setEditingRow(r => ({
+                                ...r,
+                                paid_at: e.target.checked ? new Date().toISOString() : null,
+                              }))}
+                              className="w-3 h-3"
+                            />
+                            {editingRow.paid_at ? '✓ Pagado' : 'Por pagar'}
+                          </label>
+                          {editingRow.paid_at && (
+                            <p className="text-[9px] text-muted-foreground px-1">
+                              {new Date(editingRow.paid_at).toLocaleDateString('es-EC')}
+                            </p>
+                          )}
+                          {/* Botones guardar/cancelar */}
+                          <div className="flex gap-1">
+                            <button onClick={saveRow} disabled={isSaving}
+                              className="btn-primary text-xs py-1 px-2 h-7 gap-1">
+                              {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : '✓'}
+                            </button>
+                            <button onClick={() => setEditingRow(null)} className="btn-ghost text-xs py-1 px-1.5 h-7">✕</button>
+                          </div>
                         </div>
                       ) : (
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => startEdit(item)}
-                            className="btn-ghost p-1.5 hover:text-emerald-400" title="Actualizar avance real">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setRubroModal(item)}
-                            className="btn-ghost p-1.5 hover:text-blue-400" title="Editar rubro">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => confirmDelete(item)}
-                            className="btn-ghost p-1.5 hover:text-rose-400 hover:bg-rose-500/10" title="Eliminar">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEdit(item)}
+                              className="btn-ghost p-1.5 hover:text-emerald-400" title="Actualizar avance real">
+                              <TrendingUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setRubroModal(item)}
+                              className="btn-ghost p-1.5 hover:text-blue-400" title="Editar rubro">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => confirmDelete(item)}
+                              className="btn-ghost p-1.5 hover:text-rose-400 hover:bg-rose-500/10" title="Eliminar">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {/* Badge de estado de pago visible siempre si hay cantidad real */}
+                          {parseFloat(item.real_qty || 0) > 0 && (
+                            <div className={cn(
+                              'text-[9px] px-1.5 py-0.5 rounded mt-1 w-fit',
+                              item.paid_at
+                                ? 'bg-emerald-500/15 text-emerald-400'
+                                : 'bg-amber-500/10 text-amber-400'
+                            )}>
+                              {item.paid_at ? '✓ Pagado' : '⏳ Por pagar'}
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
@@ -919,7 +968,9 @@ export default function WorkDetail() {
   const subTotal      = parseFloat(subSummary?.total_contracted || 0)
   const totalObra     = parseFloat(work?.initial_budget || 0) + subTotal
   // Costo real = egresos financieros totales (incluye pagos a subcontratos + materiales)
-  const realCostTotal = parseFloat(finSummary?.total_expense || work?.real_cost || 0)
+  const subsPaid      = parseFloat(subSummary?.total_paid || 0)
+  // Costo real = costo real de rubros propios (work.real_cost) + lo pagado a subcontratistas
+  const realCostTotal = parseFloat(work?.real_cost || 0) + subsPaid
 
   if (isLoading) return (
     <div className="space-y-4 max-w-6xl">
@@ -954,20 +1005,25 @@ export default function WorkDetail() {
             </p>
           </div>
           <div className="text-right shrink-0 space-y-0.5">
-            {/* Desglose presupuesto */}
+            {/* Desglose — costo real gastado */}
             <div className="flex items-center justify-end gap-3 text-xs text-muted-foreground">
-              <span>Recursos propios</span>
-              <span className="font-num text-foreground">{formatCurrency(work.initial_budget)}</span>
+              <span>Rubros propios (real)</span>
+              <span className="font-num text-foreground">{formatCurrency(work.real_cost)}</span>
             </div>
-            {subTotal > 0 && (
+            {subsPaid > 0 && (
               <div className="flex items-center justify-end gap-3 text-xs text-muted-foreground">
-                <span>Subcontratos</span>
-                <span className="font-num text-foreground">{formatCurrency(subTotal)}</span>
+                <span>Subcontratos (pagado)</span>
+                <span className="font-num text-foreground">{formatCurrency(subsPaid)}</span>
               </div>
             )}
             <div className="flex items-center justify-end gap-3 border-t border-border pt-1 mt-1">
-              <span className="text-xs text-muted-foreground">Total obra</span>
-              <p className="font-num text-2xl font-bold text-foreground">{formatCurrency(totalObra)}</p>
+              <span className="text-xs text-muted-foreground">Costo real total</span>
+              <p className="font-num text-2xl font-bold text-foreground">{formatCurrency(realCostTotal)}</p>
+            </div>
+            {/* Presupuesto total como referencia */}
+            <div className="flex items-center justify-end gap-3 text-[10px] text-muted-foreground/60">
+              <span>Presupuestado</span>
+              <span className="font-num">{formatCurrency(totalObra)}</span>
             </div>
             {work.status === 'ACTIVE' && (
               <button onClick={() => setShowClose(true)}
@@ -1066,7 +1122,7 @@ export default function WorkDetail() {
                 { label: 'Fecha inicio',      value: formatDate(work.start_date) },
                 { label: 'Fin estimado',      value: formatDate(work.estimated_end) },
                 { label: 'Presupuesto total', value: formatCurrency(totalObra) },
-                { label: 'Costo real',        value: formatCurrency(realCostTotal), highlight: realCostTotal > totalObra },
+                { label: 'Costo real (materiales + subcontratos)', value: formatCurrency(realCostTotal), highlight: realCostTotal > totalObra },
                 { label: 'Utilidad %',        value: `${work.utility_pct}%` },
                 { label: 'Imprevistos %',     value: `${work.contingency_pct}%` },
               ].map(row => (

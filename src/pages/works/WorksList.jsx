@@ -160,7 +160,7 @@ export default function WorksList() {
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <DollarSign className="w-3 h-3 text-amber-500" />
-                    <span className="font-num">{formatCurrency(work.initial_budget, 0)}</span>
+                    <span className="font-num">{formatCurrency(work.total_obra || work.initial_budget, 0)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3 text-blue-400" />

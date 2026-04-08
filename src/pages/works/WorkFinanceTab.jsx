@@ -6,13 +6,22 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import {
-  ArrowUpRight, ArrowDownRight, DollarSign, TrendingUp, TrendingDown,
+  ArrowUpRight, ArrowDownRight, DollarSign, TrendingUp, TrendingDown, Filter, X,
 } from 'lucide-react'
 import { formatCurrency, formatDate, cn } from '../../utils/helpers'
 
 const workFinanceApi = {
   getSummary:     (wid) => api.get(`/finance/summary?work_id=${wid}`),
-  getTransactions:(wid, page) => api.get(`/finance/transactions?work_id=${wid}&page=${page}&limit=12`),
+  getTransactions:(wid, page, filters) => {
+    const params = new URLSearchParams({
+      work_id: wid, page, limit: 12,
+      ...(filters.type      && { type:      filters.type }),
+      ...(filters.category  && { category:  filters.category }),
+      ...(filters.date_from && { date_from: filters.date_from }),
+      ...(filters.date_to   && { date_to:   filters.date_to }),
+    })
+    return api.get(`/finance/transactions?${params}`)
+  },
   getCashflow:    (wid) => api.get(`/finance/cashflow?work_id=${wid}&year=${new Date().getFullYear()}`),
 }
 
@@ -28,6 +37,9 @@ const TX_LABELS = {
   SUBCONTRACT:      'Subcontrato',
   EXTRA:            'Gasto extra',
 }
+
+const CATEGORIES_INCOME  = ['ADVANCE_CLIENT','PARTIAL_PAYMENT','FINAL_PAYMENT']
+const CATEGORIES_EXPENSE = ['ADVANCE_SUPPLIER','MATERIAL_PURCHASE','SUBCONTRACT','EXTRA']
 
 const ChartTip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -48,6 +60,27 @@ const ChartTip = ({ active, payload, label }) => {
 // Recibe totalObra (recursos + subcontratos) desde WorkDetail
 export default function WorkFinanceTab({ workId, work, totalObra, subTotal }) {
   const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState({ type: '', category: '', date_from: '', date_to: '' })
+  const [showFilters, setShowFilters] = useState(false)
+
+  const activeFiltersCount = Object.values(filters).filter(Boolean).length
+
+  const setFilter = (key, value) => {
+    setFilters(f => ({ ...f, [key]: value }))
+    setPage(1)
+  }
+
+  const clearFilters = () => {
+    setFilters({ type: '', category: '', date_from: '', date_to: '' })
+    setPage(1)
+  }
+
+  // Categorías disponibles según el tipo seleccionado
+  const availableCategories = filters.type === 'INCOME'
+    ? CATEGORIES_INCOME
+    : filters.type === 'EXPENSE'
+    ? CATEGORIES_EXPENSE
+    : [...CATEGORIES_INCOME, ...CATEGORIES_EXPENSE]
 
   const { data: summaryData } = useQuery({
     queryKey: ['work-finance-summary', workId],
@@ -55,8 +88,8 @@ export default function WorkFinanceTab({ workId, work, totalObra, subTotal }) {
   })
 
   const { data: txData } = useQuery({
-    queryKey: ['work-finance-transactions', workId, page],
-    queryFn:  () => workFinanceApi.getTransactions(workId, page),
+    queryKey: ['work-finance-transactions', workId, page, filters],
+    queryFn:  () => workFinanceApi.getTransactions(workId, page, filters),
   })
 
   const { data: cfData } = useQuery({
@@ -170,13 +203,78 @@ export default function WorkFinanceTab({ workId, work, totalObra, subTotal }) {
         </div>
       </div>
 
-      {/* Transactions */}
+      {/* Transacciones con filtros */}
       <div className="glass-card overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="font-display font-semibold text-sm text-foreground">
+        <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+          <h3 className="font-display font-semibold text-sm text-foreground shrink-0">
             Transacciones de esta Obra
           </h3>
+          <div className="flex items-center gap-2">
+            {activeFiltersCount > 0 && (
+              <button onClick={clearFilters}
+                className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 btn-ghost py-1 px-2">
+                <X className="w-3 h-3" /> Limpiar ({activeFiltersCount})
+              </button>
+            )}
+            <button onClick={() => setShowFilters(f => !f)}
+              className={cn('btn-ghost text-xs flex items-center gap-1.5',
+                showFilters && 'bg-primary/10 text-primary')}>
+              <Filter className="w-3.5 h-3.5" />
+              Filtros
+              {activeFiltersCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Panel de filtros */}
+        {showFilters && (
+          <div className="p-4 border-b border-border bg-secondary/20 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Tipo */}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Tipo</label>
+              <select className="field-input mt-1 text-xs"
+                value={filters.type}
+                onChange={e => { setFilter('type', e.target.value); setFilter('category', '') }}>
+                <option value="">Todos</option>
+                <option value="INCOME">Ingresos</option>
+                <option value="EXPENSE">Egresos</option>
+              </select>
+            </div>
+
+            {/* Categoría */}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Categoría</label>
+              <select className="field-input mt-1 text-xs"
+                value={filters.category}
+                onChange={e => setFilter('category', e.target.value)}>
+                <option value="">Todas</option>
+                {availableCategories.map(c => (
+                  <option key={c} value={c}>{TX_LABELS[c] || c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Fecha desde */}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Desde</label>
+              <input type="date" className="field-input mt-1 text-xs"
+                value={filters.date_from}
+                onChange={e => setFilter('date_from', e.target.value)} />
+            </div>
+
+            {/* Fecha hasta */}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Hasta</label>
+              <input type="date" className="field-input mt-1 text-xs"
+                value={filters.date_to}
+                onChange={e => setFilter('date_to', e.target.value)} />
+            </div>
+          </div>
+        )}
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border">
